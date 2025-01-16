@@ -1,0 +1,16 @@
+[package]
+name = "s2c"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+regex = "1.11.1"
+
+
+[dependencies.uuid]
+version = "1.12.0"
+features = [
+    "v7",                # Lets you generate random UUIDs
+    "fast-rng",          # Use a faster (but still sufficiently random) RNG
+    "macro-diagnostics", # Enable better diagnostics for compile-time UUIDs
+]
