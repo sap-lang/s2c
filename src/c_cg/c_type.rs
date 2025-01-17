@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::rand_id_generation::get_temp_variable_name;
+use crate::escape::get_temp_variable_name;
 
 use super::{CDialect, ToC, c_stmt::Context};
 
@@ -126,7 +126,7 @@ impl ToC for CType {
                     .map(|(name, ty)| format!("{} {};", ty.to_c(dialect, c_file).unwrap(), name))
                     .collect::<Vec<_>>()
                     .join("\n");
-                let name = get_temp_variable_name();
+                let name = get_temp_variable_name(&c_file.module);
                 let repr = repr
                     .clone()
                     .map(|r| r.to_c(dialect, c_file).unwrap())
@@ -154,7 +154,7 @@ impl ToC for CType {
                 return_ty,
                 arguments,
             } => {
-                let name = get_temp_variable_name();
+                let name = get_temp_variable_name(&c_file.module);
                 let return_ty = return_ty.to_c(dialect, c_file).unwrap();
                 let arguments = arguments
                     .iter()

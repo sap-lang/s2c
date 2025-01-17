@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{escape, rand_id_generation::get_temp_variable_name};
+use crate::escape::{self, get_temp_variable_name};
 
 use super::{ToC, c_stmt::Context, c_type::CType};
 
@@ -86,14 +86,14 @@ impl ToC for CValue {
         use CValue::*;
         match self {
             Literal(v) => v.to_c(dialect, context),
-            Variable(v) => Some(escape::string_to_escape_to_c_ansi_id(v)),
+            Variable(v) => Some(escape::string_to_escape_to_c_ansi_id(&context.module, v)),
             Array(ty, values) => {
                 let values = values
                     .iter()
                     .map(|value| value.to_c(dialect, context).unwrap())
                     .collect::<Vec<_>>()
                     .join(", ");
-                let name = get_temp_variable_name();
+                let name = get_temp_variable_name(&context.module);
                 if let CType::Array { ty, size } = ty {
                     let size = size.map(|s| s.to_string()).unwrap_or("".to_string());
                     let code = format!(

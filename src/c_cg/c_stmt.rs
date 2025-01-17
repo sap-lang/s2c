@@ -1,9 +1,11 @@
 use core::panic;
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::BTreeSet,
+    sync::{Arc, Mutex},
+};
 
-use crate::{
-    escape::{format_to_escape_replace, string_to_escape_to_c_ansi_id},
-    rand_id_generation::get_temp_variable_name,
+use crate::escape::{
+    format_to_escape_replace, get_temp_variable_name, string_to_escape_to_c_ansi_id,
 };
 
 use super::{CDialect, ToC, c_arch::Arch, c_file::CFile, c_type::CType, c_value::CValue};
@@ -11,7 +13,9 @@ pub type Variable = String;
 
 pub struct Context {
     pub c_file: Arc<Mutex<CFile>>,
+    pub module: String,
     pub dialect: CDialect,
+    pub variables: Mutex<BTreeSet<Variable>>,
     pub current_source: Mutex<String>,
 }
 
@@ -104,29 +108,40 @@ impl Context {
         self
     }
 
-    pub fn decl(&self, name: String, ty: CType, value: CValue) -> &Self {
-        let name = string_to_escape_to_c_ansi_id(&name);
-        let ty = ty.to_c(self.dialect, self).unwrap();
-        let value = value.to_c(self.dialect, self).unwrap();
-        self.current_source
-            .lock()
-            .unwrap()
-            .push_str(&format!("{} {} = {};\n", ty, name, value));
-        self
-    }
+    // pub fn decl(&self, name: String, ty: CType, value: CValue) -> &Self {
+    //     let name = string_to_escape_to_c_ansi_id(&self.module,&name);
+    //     let ty = ty.to_c(self.dialect, self).unwrap();
+    //     let value = value.to_c(self.dialect, self).unwrap();
+    //     self.current_source
+    //         .lock()
+    //         .unwrap()
+    //         .push_str(&format!("{} {} = {};\n", ty, name, value));
+    //     self
+    // }
 
-    pub fn set(&self, name: Variable, value: CValue) -> &Self {
-        let name = string_to_escape_to_c_ansi_id(&name);
-        self.current_source.lock().unwrap().push_str(&format!(
-            "{} = {};\n",
-            name,
-            value.to_c(self.dialect, self).unwrap()
-        ));
+    pub fn set(&self, ty: CType, name: Variable, value: CValue) -> &Self {
+        if self.variables.lock().unwrap().insert(name.clone()) {
+            let name = string_to_escape_to_c_ansi_id(&self.module, &name);
+            let ty = ty.to_c(self.dialect, self).unwrap();
+            let value = value.to_c(self.dialect, self).unwrap();
+            self.current_source
+                .lock()
+                .unwrap()
+                .push_str(&format!("{} {} = {};\n", ty, name, value));
+        } else {
+            let name = string_to_escape_to_c_ansi_id(&self.module, &name);
+            self.current_source.lock().unwrap().push_str(&format!(
+                "{} = {};\n",
+                name,
+                value.to_c(self.dialect, self).unwrap()
+            ));
+        }
+
         self
     }
 
     fn decl_tmp(&self, ty: &CType) -> (&Self, String) {
-        let name = get_temp_variable_name();
+        let name = get_temp_variable_name(&self.module);
         self.current_source.lock().unwrap().push_str(&format!(
             "{} {};\n",
             ty.to_c(self.dialect, self).unwrap(),
@@ -141,6 +156,8 @@ impl Context {
             Context {
                 c_file: self.c_file.clone(),
                 dialect: self.dialect,
+                module: self.module.clone(),
+                variables: Mutex::new(self.variables.lock().unwrap().clone()),
                 current_source: Mutex::new(String::new()),
             },
             ret.clone(),
@@ -158,7 +175,7 @@ impl Context {
         if self.dialect != CDialect::Standard {
             panic!("raw pragma is not supported in dialect {:?}", self.dialect);
         }
-        code = format_to_escape_replace(code);
+        code = format_to_escape_replace(&self.module, code);
         self.current_source
             .lock()
             .unwrap()
@@ -189,6 +206,8 @@ impl Context {
                     Context {
                         c_file: self.c_file.clone(),
                         dialect: self.dialect,
+                        module: self.module.clone(),
+                        variables: Mutex::new(self.variables.lock().unwrap().clone()),
                         current_source: Mutex::new(String::new()),
                     },
                     phi.clone(),
@@ -207,6 +226,8 @@ impl Context {
                 Context {
                     c_file: self.c_file.clone(),
                     dialect: self.dialect,
+                    module: self.module.clone(),
+                    variables: Mutex::new(self.variables.lock().unwrap().clone()),
                     current_source: Mutex::new(String::new()),
                 },
                 phi.clone(),
@@ -228,7 +249,7 @@ impl Context {
     ) -> &Self {
         let init = init
             .map(|(ty, name, value)| {
-                let name = string_to_escape_to_c_ansi_id(&name);
+                let name = string_to_escape_to_c_ansi_id(&self.module, &name);
                 let ty = ty.to_c(self.dialect, self).unwrap();
                 let value = value.to_c(self.dialect, self).unwrap();
                 format!("{} {} = {};", ty, name, value)
@@ -243,6 +264,8 @@ impl Context {
         let (block, _) = block(Context {
             c_file: self.c_file.clone(),
             dialect: self.dialect,
+            module: self.module.clone(),
+            variables: Mutex::new(self.variables.lock().unwrap().clone()),
             current_source: Mutex::new(String::new()),
         });
         let block = block.current_source.lock().unwrap().clone();
@@ -258,7 +281,7 @@ impl Context {
         args: Vec<(CType, Variable)>,
         body: impl Fn(Self) -> Self,
     ) -> &Self {
-        let name = string_to_escape_to_c_ansi_id(&name);
+        let name = string_to_escape_to_c_ansi_id(&self.module, &name);
         let ret = ret.to_c(self.dialect, self).unwrap();
         let args = args
             .iter()
@@ -266,7 +289,7 @@ impl Context {
                 format!(
                     "{} {}",
                     ty.to_c(self.dialect, self).unwrap(),
-                    string_to_escape_to_c_ansi_id(name)
+                    string_to_escape_to_c_ansi_id(&self.module, name)
                 )
             })
             .collect::<Vec<_>>()
@@ -274,6 +297,8 @@ impl Context {
         let body = body(Context {
             c_file: self.c_file.clone(),
             dialect: self.dialect,
+            module: self.module.clone(),
+            variables: Mutex::new(self.variables.lock().unwrap().clone()),
             current_source: Mutex::new(String::new()),
         });
         let body = body.current_source.lock().unwrap().clone();
