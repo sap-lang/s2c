@@ -20,6 +20,18 @@ pub struct Context {
 }
 
 impl Context {
+    pub fn standard(module_name: String) -> Self {
+        Self {
+            c_file: Default::default(),
+            module: module_name,
+            dialect: CDialect::Standard,
+            variables: Default::default(),
+            current_source: Default::default(),
+        }
+    }
+}
+
+impl Context {
     pub fn global_inline_c(&self, code: String) -> &Self {
         self.c_file.lock().unwrap().global_inline_c.push(code);
         self

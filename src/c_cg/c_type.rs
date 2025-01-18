@@ -25,6 +25,7 @@ impl ToC for Repr {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CType {
+    Void,
     I8,
     I16,
     I32,
